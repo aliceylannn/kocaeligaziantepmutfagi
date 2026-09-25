@@ -1,32 +1,36 @@
-# Kocaeli Gaziantep Mutfağı — Ürün Gereksinim Dokümanı
+# PRD — Kocaeli Gaziantep Mutfağı
 
-## Original Problem Statement
-“Merhaba ben evde yemek yapıp satıyorum. Bunun için bir site kurmanı istiyorum.”
+## Orijinal Problem
+"Merhaba ben evde yemek yapıp satıyorum. Bunun için bir site kurmanı istiyorum" — Evde yemek yapıp satan bir kullanıcı için günlük menü (hamur işi, zeytinyağlı, köfte/salata, tatlı) sergileyen, WhatsApp üzerinden sipariş alan site.
 
-## User Choices
-- Ana amaç: Günlük menüyü/fiyat listesini gösterip WhatsApp’tan sipariş almak
-- Ürünler: Meze, hamur işi ve tatlılar; yüklenen broşürdeki gerçek fiyat listesi
-- İletişim: WhatsApp ve telefon
-- Stil: Sıcak, samimi, ev yapımı; broşürdeki krem-kahve marka dili
+## Kullanıcı Kişileri
+- Müşteri: Menüye bakar, fiyat görür, WhatsApp/telefon ile sipariş verir, teslimat bölgesini sorgular, AI asistana soru sorar.
+- İşletme sahibi: AI asistanın "İşletme" modu ile sosyal medya metni ve duyuru üretir.
 
-## Architecture Decisions
-- Frontend: React single-page vitrin, responsive ve kategori filtreli
-- Backend: FastAPI `/api/menu` ve `/api/delivery-check` uçları
-- Database: Mevcut MongoDB bağlantısı korunuyor; bu MVP’de sabit broşür kataloğu okunabilir API olarak sunuluyor
-- Sipariş: WhatsApp deep-link; ürün adı ve fiyatı önceden dolduruluyor
+## Mimari
+- React frontend (App.js, özel App.css, sıcak/organik tasarım)
+- FastAPI backend (server.py) — menü, teslimat kontrolü, AI sohbet (SSE streaming, gpt-5.4, Emergent LLM Key)
+- MongoDB: `ai_messages` (sohbet geçmişi), `status_checks`
 
-## Implemented
-- Kocaeli Gaziantep Mutfağı marka adı, 0541 440 80 94 telefon ve Instagram bağlantısı
-- Broşürdeki 36 ürün ve fiyatı; hamur işi, zeytinyağlılar, köfteler & salatalar, kurabiyeler & tatlılar kategorileri
-- Hero, fiyat listesi, ürün kartları, teslimat bölgesi kontrolü, hakkımızda, müşteri yorumu ve footer
-- WhatsApp sipariş butonları ve ürün bazlı sipariş aksiyonu
-- Mobil navigasyon, responsive kart düzeni ve stabil `data-testid` kimlikleri
-- GPT-5.4 tabanlı Türkçe müşteri menü asistanı ve işletme içerik yardımcısı
-- SSE ile canlı yanıt akışı ve MongoDB'de AI sohbet geçmişi kaydı
+## Temel Gereksinimler (sabit)
+- WhatsApp sipariş butonları (ürün bazlı ön doldurulmuş mesaj)
+- Telefonla arama (0541 440 80 94)
+- Mahalle teslimat kontrolü
+- Sıcak, ev yapımı, artizan görsel dil
+- Türkçe arayüz
 
-## Prioritized Backlog
-- P0: İşletme sahibinin kendi panelinden ürün/fiyat güncellemesi
-- P1: Buzluk ürünleri ve özel gün siparişleri için ayrı sipariş formu
-- P1: Teslimat ücretini mahalleye göre gösterme
-- P2: Broşür QR kodunu doğrudan WhatsApp siparişine bağlama
-- P2: İşletme yardımcısı modunu hesap girişiyle sadece işletme sahibine açma
+## Tamamlananlar
+- 2026-09: İlk sürüm — menü, WhatsApp, teslimat kontrolü, broşür fiyatları
+- 2026-09: AI Asistan (müşteri + işletme modu, GPT-5.4, sohbet geçmişi)
+- 2026-09-25: Ürün fotoğrafları düzeltildi — 8 farklı doğrulanmış kategori fotoğrafı (börek, poğaça, sarma, içli köfte, çiğ köfte/salata, şerbetli tatlı, sütlü tatlı, kurabiye/kek) hem backend hem frontend yedek menüsünde
+
+## Kalan / Backlog
+- P1: Teslimat bölgeleri şu an Kadıköy/Moda vb. (İstanbul); işletme Kocaeli'de — gerçek mahalle listesiyle güncellenmeli (kullanıcıdan liste bekleniyor)
+- P2: Gerçek ürün fotoğrafları (işletmenin kendi çekimleri) yükleme özelliği
+- P2: Sipariş sepeti ve toplam tutar ile WhatsApp mesajı
+- P2: Admin panelinden menü düzenleme
+
+## Sonraki Görevler
+1. Kullanıcıdan Kocaeli teslimat mahalleleri listesini al
+2. İşletmenin kendi ürün fotoğraflarını kabul edecek yükleme akışı
+3. Yayına alma (Deploy)
