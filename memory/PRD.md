@@ -21,9 +21,12 @@
 - Hero, fiyat listesi, ürün kartları, teslimat bölgesi kontrolü, hakkımızda, müşteri yorumu ve footer
 - WhatsApp sipariş butonları ve ürün bazlı sipariş aksiyonu
 - Mobil navigasyon, responsive kart düzeni ve stabil `data-testid` kimlikleri
+- GPT-5.4 tabanlı Türkçe müşteri menü asistanı ve işletme içerik yardımcısı
+- SSE ile canlı yanıt akışı ve MongoDB'de AI sohbet geçmişi kaydı
 
 ## Prioritized Backlog
 - P0: İşletme sahibinin kendi panelinden ürün/fiyat güncellemesi
 - P1: Buzluk ürünleri ve özel gün siparişleri için ayrı sipariş formu
 - P1: Teslimat ücretini mahalleye göre gösterme
 - P2: Broşür QR kodunu doğrudan WhatsApp siparişine bağlama
+- P2: İşletme yardımcısı modunu hesap girişiyle sadece işletme sahibine açma
