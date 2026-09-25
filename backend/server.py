@@ -1,4 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -6,9 +7,11 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+from typing import List, Literal
 import uuid
+import json
 from datetime import datetime, timezone
+from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
 
 
 ROOT_DIR = Path(__file__).parent
@@ -54,6 +57,18 @@ class DeliveryResult(BaseModel):
     neighborhood: str
     available: bool
     message: str
+
+class AIChatRequest(BaseModel):
+    message: str
+    mode: Literal["customer", "owner"] = "customer"
+    session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+
+class AIChatMessage(BaseModel):
+    session_id: str
+    role: Literal["user", "assistant"]
+    content: str
+    mode: Literal["customer", "owner"]
+    created_at: str
 
 FOOD_IMAGES = {
     "hamur": "https://images.pexels.com/photos/38356208/pexels-photo-38356208.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
@@ -122,6 +137,50 @@ async def check_delivery(input: DeliveryCheck):
     available = any(zone.casefold() == neighborhood.casefold() for zone in DELIVERY_ZONES)
     message = "Bu bölgeye teslimat yapıyoruz. Siparişinizi WhatsApp'tan bekliyoruz." if available else "Bu bölge henüz teslimat rotamızda değil; gelip alma seçeneğimiz her gün açık."
     return {"neighborhood": neighborhood, "available": available, "message": message}
+
+def menu_context():
+    return "\n".join(f"- {entry['name']}: {entry['price']} TL / {entry['unit']} ({entry['category']})" for entry in MENU_ITEMS)
+
+def system_prompt(mode: str):
+    shared = f"""Sen Kocaeli Gaziantep Mutfağı'nın Türkçe dijital asistanısın. Sıcak, kısa ve güvenilir cevaplar ver. İşletme telefonu 0541 440 80 94. Güncel fiyat ve ürün bilgileri yalnızca aşağıdaki listedir; listede olmayan bir ürün veya fiyat uydurma. Sipariş için müşteriyi WhatsApp'a yönlendir.\n\nGÜNCEL MENÜ:\n{menu_context()}"""
+    if mode == "owner":
+        return shared + "\n\nBu oturum işletme sahibine yardım eder. Menü açıklaması, kampanya fikri, Instagram metni ve müşteri duyurusu hazırlayabilirsin. Metinleri Türkçe, pratik ve markanın ev yapımı tonunda üret."
+    return shared + "\n\nBu oturum müşterilere yardımcı olur. Ürün öner, fiyat ve porsiyon bilgisi ver, teslimat/sipariş sorularını yanıtla. İşletme içi veya gizli bilgi paylaşma."
+
+@api_router.post("/ai/chat")
+async def ai_chat(input: AIChatRequest):
+    message = input.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Mesaj boş olamaz")
+    if len(message) > 2000:
+        raise HTTPException(status_code=400, detail="Mesaj 2000 karakterden kısa olmalı")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.ai_messages.insert_one({"session_id": input.session_id, "role": "user", "content": message, "mode": input.mode, "created_at": now})
+    previous = await db.ai_messages.find({"session_id": input.session_id}, {"_id": 0, "role": 1, "content": 1}).sort("created_at", -1).to_list(8)
+    context = "\n".join(f"{entry['role']}: {entry['content']}" for entry in reversed(previous[:-1]))
+    prompt = f"Önceki konuşma:\n{context}\n\nYeni kullanıcı mesajı:\n{message}" if context else message
+    key = os.environ.get("EMERGENT_LLM_KEY")
+    if not key:
+        raise HTTPException(status_code=503, detail="AI anahtarı yapılandırılmamış")
+
+    async def event_generator():
+        answer_parts = []
+        try:
+            chat = LlmChat(api_key=key, session_id=input.session_id, system_message=system_prompt(input.mode)).with_model("openai", "gpt-5.4")
+            async for event in chat.stream_message(UserMessage(text=prompt)):
+                if isinstance(event, TextDelta):
+                    answer_parts.append(event.content)
+                    yield f"data: {json.dumps({'content': event.content}, ensure_ascii=False)}\n\n"
+                elif isinstance(event, StreamDone):
+                    break
+            answer = "".join(answer_parts)
+            await db.ai_messages.insert_one({"session_id": input.session_id, "role": "assistant", "content": answer, "mode": input.mode, "created_at": datetime.now(timezone.utc).isoformat()})
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            logger.exception("AI streaming failed: %s", exc)
+            yield f"data: {json.dumps({'error': 'Şu anda yanıt veremiyorum. Lütfen biraz sonra tekrar deneyin.'}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):

@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import "@/App.css";
 import axios from "axios";
-import { ArrowRight, Check, ChevronDown, Clock3, Heart, Instagram, MapPin, Menu, Phone, ShoppingBag, Sparkles, Star, X } from "lucide-react";
+import { ArrowRight, Bot, Check, ChevronDown, Clock3, Heart, Instagram, MapPin, Menu, Phone, Send, ShoppingBag, Sparkles, Star, X } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const phone = "+905414408094";
@@ -20,10 +20,20 @@ const fallbackMenu = [
 const whatsappLink = (text) => `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 const testSlug = (value) => value.toLocaleLowerCase("tr-TR").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/&/g, "ve").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 function Home() {
-  const [menu, setMenu] = useState(fallbackMenu); const [activeCategory, setActiveCategory] = useState("Tümü"); const [mobileOpen, setMobileOpen] = useState(false); const [neighborhood, setNeighborhood] = useState(""); const [deliveryResult, setDeliveryResult] = useState(null); const [checking, setChecking] = useState(false);
+  const [menu, setMenu] = useState(fallbackMenu); const [activeCategory, setActiveCategory] = useState("Tümü"); const [mobileOpen, setMobileOpen] = useState(false); const [neighborhood, setNeighborhood] = useState(""); const [deliveryResult, setDeliveryResult] = useState(null); const [checking, setChecking] = useState(false); const [aiOpen, setAiOpen] = useState(false); const [aiMode, setAiMode] = useState("customer"); const [aiInput, setAiInput] = useState(""); const [aiSending, setAiSending] = useState(false); const [aiMessages, setAiMessages] = useState([{ role: "assistant", content: "Merhaba! Menü ve fiyatlar hakkında merak ettiğiniz her şeyi sorabilirsiniz." }]);
   const orderText = "Merhaba, Kocaeli Gaziantep Mutfağı'ndan sipariş vermek istiyorum.";
   useEffect(() => { axios.get(`${API}/menu`).then((response) => setMenu(response.data)).catch(() => {}); }, []);
   const filteredMenu = useMemo(() => activeCategory === "Tümü" ? menu : menu.filter((item) => item.category === activeCategory), [activeCategory, menu]);
+  const sendAI = async (event) => {
+    event.preventDefault(); const text = aiInput.trim(); if (!text || aiSending) return;
+    setAiInput(""); setAiSending(true); setAiMessages((items) => [...items, { role: "user", content: text }, { role: "assistant", content: "" }]);
+    try {
+      const response = await fetch(`${API}/ai/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text, mode: aiMode, session_id: "web-" + (window.localStorage.getItem("ai-session") || (() => { const id = crypto.randomUUID(); window.localStorage.setItem("ai-session", id); return id; })()) }) });
+      if (!response.ok || !response.body) throw new Error("AI unavailable");
+      const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = "";
+      while (true) { const { value, done } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true }); const chunks = buffer.split("\n\n"); buffer = chunks.pop() || ""; chunks.forEach((chunk) => { const line = chunk.split("\n").find((entry) => entry.startsWith("data: ")); if (!line) return; const payload = line.slice(6); if (payload === "[DONE]") return; const data = JSON.parse(payload); if (data.error) throw new Error(data.error); setAiMessages((items) => { const next = [...items]; next[next.length - 1] = { role: "assistant", content: next[next.length - 1].content + data.content }; return next; }); }); }
+    } catch { setAiMessages((items) => { const next = [...items]; next[next.length - 1] = { role: "assistant", content: "Şu an yanıt veremiyorum. WhatsApp'tan bize yazabilirsiniz." }; return next; }); } finally { setAiSending(false); }
+  };
   const checkZone = async (event) => { event.preventDefault(); if (!neighborhood.trim()) return; setChecking(true); try { const response = await axios.post(`${API}/delivery-check`, { neighborhood }); setDeliveryResult(response.data); } catch { setDeliveryResult({ available: false, message: "Şu an kontrol edemedik, WhatsApp'tan bize yazabilirsiniz." }); } finally { setChecking(false); } };
   return <div className="site-shell">
     <div className="top-note"><Sparkles size={14} /> Ev yapımı günlük lezzetler <span>•</span> Özel gün siparişleri alınır</div>
@@ -36,6 +46,8 @@ function Home() {
       <section className="quote-section"><div className="quote-mark">“</div><blockquote>“Ev yapımı lezzeti arayan herkese<br />gönülden tavsiye ederim.”</blockquote><div className="quote-author"><span>KG</span><div><b>Memnun müşterilerimiz</b><small>Kocaeli, Türkiye</small></div><div className="stars">★★★★★</div></div></section>
     </main>
     <footer className="footer"><div className="footer-brand"><a className="brand" href="#anasayfa"><span className="brand-mark">KG</span><span>Kocaeli <em>Gaziantep Mutfağı</em></span></a><p>Ev yapımı günlük lezzetler.</p></div><div><h4>Bizi bul</h4><a href={`tel:${phone}`} data-testid="footer-phone-link"><Phone size={14} /> {phoneLabel}</a><a href="https://instagram.com/kocaeli_gaziantep_mutfagi" target="_blank" rel="noreferrer" data-testid="footer-instagram-link"><Instagram size={14} /> @kocaeli_gaziantep_mutfagi</a></div><div><h4>Sipariş</h4><p><Clock3 size={14} /> Özel gün ve günlük<br /><span>siparişler alınır</span></p></div><a href={whatsappLink(orderText)} target="_blank" rel="noreferrer" className="footer-order" data-testid="footer-whatsapp-link">WhatsApp'tan sipariş ver <ArrowRight size={16} /></a></footer>
+    <button className="ai-launcher" onClick={() => setAiOpen(!aiOpen)} data-testid="ai-assistant-launcher" aria-label="AI asistanı aç">{aiOpen ? <X /> : <Bot />}<span>AI Asistan</span></button>
+    {aiOpen && <aside className="ai-panel" data-testid="ai-assistant-panel"><div className="ai-header"><div><span className="ai-icon"><Bot size={18} /></span><div><b>{aiMode === "customer" ? "Menü Asistanı" : "İşletme Yardımcısı"}</b><small>{aiMode === "customer" ? "Fiyat ve ürün sorabilirsiniz" : "İçerik fikirleri üretir"}</small></div></div><button onClick={() => setAiOpen(false)} data-testid="ai-close-button"><X size={17} /></button></div><div className="ai-mode"><button className={aiMode === "customer" ? "active" : ""} onClick={() => setAiMode("customer")} data-testid="ai-customer-mode-button">Müşteri</button><button className={aiMode === "owner" ? "active" : ""} onClick={() => setAiMode("owner")} data-testid="ai-owner-mode-button">İşletme</button></div><div className="ai-messages" data-testid="ai-message-list">{aiMessages.map((message, index) => <div className={`ai-message ${message.role}`} key={`${message.role}-${index}`} data-testid={`ai-message-${index}`}>{message.content || (aiSending ? "Yazıyor..." : "")}</div>)}</div><form className="ai-form" onSubmit={sendAI}><input value={aiInput} onChange={(event) => setAiInput(event.target.value)} placeholder={aiMode === "customer" ? "Örn. Cheesecake kaç TL?" : "Örn. Instagram metni yaz"} data-testid="ai-message-input" /><button type="submit" disabled={aiSending} data-testid="ai-send-button"><Send size={16} /></button></form></aside>}
   </div>;
 }
 function App() { return <Home />; }
