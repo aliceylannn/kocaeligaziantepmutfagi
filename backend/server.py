@@ -55,13 +55,52 @@ class DeliveryResult(BaseModel):
     available: bool
     message: str
 
+FOOD_IMAGES = {
+    "hamur": "https://images.pexels.com/photos/38356208/pexels-photo-38356208.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "zeytinyagli": "https://images.pexels.com/photos/36425899/pexels-photo-36425899.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "tatli": "https://images.unsplash.com/photo-1749549028894-fb0adae64a67?auto=format&fit=crop&w=900&q=85",
+}
+
+def item(id, name, category, price, unit, description, image):
+    return {"id": id, "name": name, "category": category, "price": price, "unit": unit, "description": description, "image": FOOD_IMAGES[image]}
+
 MENU_ITEMS = [
-    {"id": "haydari", "name": "Sarımsaklı Haydari", "category": "Meze", "description": "Süzme yoğurt, taze nane ve zeytinyağıyla.", "price": 135, "unit": "500 g", "image": "https://images.pexels.com/photos/36425899/pexels-photo-36425899.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", "badge": "Çok sevilen"},
-    {"id": "mercimek-kofte", "name": "Mercimek Köftesi", "category": "Meze", "description": "Bol yeşillik, nar ekşisi ve ev yapımı lezzet.", "price": 160, "unit": "20 adet", "image": "https://images.pexels.com/photos/36425899/pexels-photo-36425899.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"},
-    {"id": "kol-borek", "name": "El Açması Kol Böreği", "category": "Hamur İşi", "description": "İncecik açılmış yufka, peynir ve maydanoz.", "price": 220, "unit": "6 dilim", "image": "https://images.pexels.com/photos/38356208/pexels-photo-38356208.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", "badge": "Bugünün favorisi"},
-    {"id": "su-borek", "name": "Peynirli Su Böreği", "category": "Hamur İşi", "description": "Kat kat, yumuşacık ve fırından yeni çıkmış.", "price": 240, "unit": "6 dilim", "image": "https://images.pexels.com/photos/38356208/pexels-photo-38356208.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"},
-    {"id": "baklava", "name": "Ev Baklavası", "category": "Tatlı", "description": "Antep fıstığı, tereyağı ve çıtır ince yufkalar.", "price": 280, "unit": "500 g", "image": "https://images.unsplash.com/photo-1749549028894-fb0adae64a67?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwyfHx0dXJraXNoJTIwaG9tZW1hZGUlMjBmb29kJTIwYm9yZWslMjBkb2xsYXxlbnwwfHx8fDE3OTAzMjgyNjJ8MA&ixlib=rb-4.1.0&q=85"},
-    {"id": "irmik-helvasi", "name": "Çam Fıstıklı İrmik Helvası", "category": "Tatlı", "description": "Tereyağlı, mis kokulu ve tam kıvamında.", "price": 180, "unit": "500 g", "image": "https://images.unsplash.com/photo-1749549028894-fb0adae64a67?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwyfHx0dXJraXNoJTIwaG9tZW1hZGUlMjBmb29kJTIwYm9yZWslMjBkb2xsYXxlbnwwfHx8fDE3OTAzMjgyNjJ8MA&ixlib=rb-4.1.0&q=85"},
+    item("milfoy-tepsi", "Milföylü Tepsi Böreği", "Hamur İşi", 800, "tepsi", "Kat kat, çıtır ve fırından taze.", "hamur"),
+    item("katmer-pogaca", "Katmer Poğaça", "Hamur İşi", 600, "kg", "Tel tel açılan yumuşacık poğaça.", "hamur"),
+    item("peynirli-pogaca", "1 Tepsi Peynirli Poğaça", "Hamur İşi", 500, "tepsi", "Ev yapımı peynirli poğaça.", "hamur"),
+    item("sade-pogaca", "1 Tepsi Sade Poğaça", "Hamur İşi", 400, "tepsi", "Çayın yanına taptaze.", "hamur"),
+    item("sakalli-pogaca", "1 Tepsi Sakallı Poğaça", "Hamur İşi", 500, "tepsi", "Peynirli, yumuşak ve doyurucu.", "hamur"),
+    item("midye-borek", "Midye Börek", "Hamur İşi", 550, "kg", "Özel kıvrımıyla çıtır börek.", "hamur"),
+    item("gul-boregi", "Gül Böreği", "Hamur İşi", 550, "kg", "Peynirli veya patatesli hazırlanır.", "hamur"),
+    item("kalem-boregi", "Kalem Böreği", "Hamur İşi", 450, "kg", "Çıtır çıtır atıştırmalık.", "hamur"),
+    item("yaprak-sarma-cig", "Yaprak Sarma", "Zeytinyağlılar", 700, "çiğ kg", "Zeytinyağlı, incecik sarılmış.", "zeytinyagli"),
+    item("yaprak-sarma-pismis", "Yaprak Sarma", "Zeytinyağlılar", 750, "pişmiş kg", "Servise hazır, limonuyla nefis.", "zeytinyagli"),
+    item("kuru-dolma-cig", "Kuru Gaziantep Dolma", "Zeytinyağlılar", 650, "çiğ kg", "Gaziantep usulü baharatlı dolma.", "zeytinyagli"),
+    item("kuru-dolma-pismis", "Kuru Gaziantep Dolma", "Zeytinyağlılar", 700, "pişmiş kg", "Geleneksel tarifle hazırlanır.", "zeytinyagli"),
+    item("lahana-sarma-cig", "Lahana Sarma", "Zeytinyağlılar", 700, "çiğ kg", "Taze lahanadan ev usulü.", "zeytinyagli"),
+    item("lahana-sarma-pismis", "Lahana Sarma", "Zeytinyağlılar", 750, "pişmiş kg", "Pişmiş, servise hazır.", "zeytinyagli"),
+    item("icli-kofte-dondurulmus", "İçli Köfte", "Köfteler & Salatalar", 75, "adet", "Dondurulmuş, pişirmeye hazır.", "zeytinyagli"),
+    item("icli-kofte-kizartilmis", "İçli Köfte", "Köfteler & Salatalar", 85, "adet", "Kızartılmış, sıcak servis.", "zeytinyagli"),
+    item("cig-kofte", "Çiğ Köfte", "Köfteler & Salatalar", 400, "kg", "Bol yeşillikli ev yapımı çiğ köfte.", "zeytinyagli"),
+    item("mercimek-kofte", "Mercimek Köftesi", "Köfteler & Salatalar", 500, "kg", "Nar ekşili, bol yeşillikli.", "zeytinyagli"),
+    item("fellah-kofte", "Fellah Köftesi", "Köfteler & Salatalar", 550, "kg", "Sarımsaklı sosuyla nefis.", "zeytinyagli"),
+    item("tavuklu-sehriye", "Tavuklu Şehriye Salatası", "Köfteler & Salatalar", 800, "kg", "Günlük ve taptaze hazırlanır.", "zeytinyagli"),
+    item("patates-salatasi", "Patates Salatası", "Köfteler & Salatalar", 500, "kg", "Ev usulü, bol yeşillikli.", "zeytinyagli"),
+    item("mor-lahana", "Mor Lahana Salatası", "Köfteler & Salatalar", 450, "kg", "Renkli, kıtır ve taze.", "zeytinyagli"),
+    item("kuskus-tarator", "Kuskuslu Havuç Tarator", "Köfteler & Salatalar", 600, "kg", "Yoğurtlu, hafif ve doyurucu.", "zeytinyagli"),
+    item("havuc-tarator", "Havuç Tarator", "Köfteler & Salatalar", 400, "kg", "Sarımsaklı yoğurtla hazırlanır.", "zeytinyagli"),
+    item("cheesecake", "Cheesecake", "Kurabiyeler & Tatlılar", 2000, "borcam", "İpeksi dokulu ev yapımı cheesecake.", "tatli"),
+    item("trilece", "Trileçe", "Kurabiyeler & Tatlılar", 1000, "borcam", "Üç sütlü, hafif ve yumuşak.", "tatli"),
+    item("orman-meyveli-trilece", "Orman Meyveli Trileçe", "Kurabiyeler & Tatlılar", 1100, "borcam", "Meyveli, ferah ve nefis.", "tatli"),
+    item("islak-kek", "Islak Kek", "Kurabiyeler & Tatlılar", 800, "kg / borcam", "Bol çikolatalı ev keki.", "tatli"),
+    item("aglayan-pasta", "Ağlayan Pasta", "Kurabiyeler & Tatlılar", 850, "kg / borcam", "Çikolata soslu yumuşak pasta.", "tatli"),
+    item("coco-star", "Coco Star", "Kurabiyeler & Tatlılar", 1100, "kg", "Hindistan cevizli özel tatlı.", "tatli"),
+    item("latte-pasta", "Latte Pasta", "Kurabiyeler & Tatlılar", 1200, "borcam", "Kahve aromalı hafif pasta.", "tatli"),
+    item("sekerpare", "Şekerpare", "Kurabiyeler & Tatlılar", 600, "kg", "Şerbetini tam çekmiş.", "tatli"),
+    item("misir-kurabiye", "Mısır Gevrekli Kurabiye", "Kurabiyeler & Tatlılar", 650, "kg", "Kıtır dokulu özel kurabiye.", "tatli"),
+    item("elmali-kurabiye", "Elmalı Kurabiye", "Kurabiyeler & Tatlılar", 650, "kg", "Tarçınlı elmalı iç harç.", "tatli"),
+    item("brownie", "Brownie Kurabiye", "Kurabiyeler & Tatlılar", 600, "kg", "Yoğun çikolatalı.", "tatli"),
+    item("sutlu-kurabiye", "Sütlü Kurabiye", "Kurabiyeler & Tatlılar", 600, "kg", "Ağızda dağılan yumuşaklık.", "tatli"),
 ]
 
 DELIVERY_ZONES = {"Kadıköy", "Moda", "Fenerbahçe", "Göztepe", "Suadiye", "Koşuyolu"}
