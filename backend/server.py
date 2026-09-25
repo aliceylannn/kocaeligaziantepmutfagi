@@ -11,6 +11,7 @@ from typing import List, Literal
 import uuid
 import json
 import hmac
+import bcrypt
 import requests
 import jwt
 from datetime import datetime, timezone, timedelta
@@ -68,6 +69,10 @@ class AIChatRequest(BaseModel):
 
 class AdminLogin(BaseModel):
     password: str
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
 
 class ZoneInput(BaseModel):
     name: str
@@ -202,12 +207,28 @@ async def check_delivery(input: DeliveryCheck):
 async def list_zones():
     return {"zones": await get_zones()}
 
+async def verify_admin_password(password: str) -> bool:
+    doc = await db.settings.find_one({"key": "admin_password"})
+    if doc:
+        return bcrypt.checkpw(password.encode("utf-8"), doc["hash"].encode("utf-8"))
+    expected = os.environ.get("ADMIN_PASSWORD", "")
+    return bool(expected) and hmac.compare_digest(password, expected)
+
 @api_router.post("/admin/login")
 async def admin_login(input: AdminLogin):
-    expected = os.environ.get("ADMIN_PASSWORD", "")
-    if not expected or not hmac.compare_digest(input.password, expected):
+    if not await verify_admin_password(input.password):
         raise HTTPException(status_code=401, detail="Şifre hatalı")
     return {"token": create_admin_token()}
+
+@api_router.post("/admin/change-password")
+async def change_password(input: PasswordChange, _admin=Depends(require_admin)):
+    if not await verify_admin_password(input.current_password):
+        raise HTTPException(status_code=400, detail="Mevcut şifre hatalı")
+    if len(input.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Yeni şifre en az 8 karakter olmalı")
+    hashed = bcrypt.hashpw(input.new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    await db.settings.update_one({"key": "admin_password"}, {"$set": {"key": "admin_password", "hash": hashed}}, upsert=True)
+    return {"message": "Şifre güncellendi"}
 
 @api_router.post("/admin/delivery/zones")
 async def add_zone(input: ZoneInput, _admin=Depends(require_admin)):

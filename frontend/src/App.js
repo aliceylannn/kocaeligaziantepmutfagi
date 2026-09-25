@@ -80,6 +80,11 @@ function Home() {
   const [zoneInput, setZoneInput] = useState("");
   const [announceText, setAnnounceText] = useState("");
   const [announcing, setAnnouncing] = useState(false);
+  const [passCurrent, setPassCurrent] = useState("");
+  const [passNew, setPassNew] = useState("");
+  const [passNew2, setPassNew2] = useState("");
+  const [passMsg, setPassMsg] = useState("");
+  const [passSaving, setPassSaving] = useState(false);
 
   const orderText = "Merhaba, Kocaeli Gaziantep Mutfağı'ndan sipariş vermek istiyorum.";
   const authH = () => ({ Authorization: `Bearer ${ownerToken}` });
@@ -162,6 +167,19 @@ function Home() {
     finally { setAnnouncing(false); }
   };
 
+  const changePassword = async (event) => {
+    event.preventDefault();
+    setPassMsg("");
+    if (passNew !== passNew2) { setPassMsg("Yeni şifreler birbiriyle eşleşmiyor."); return; }
+    setPassSaving(true);
+    try {
+      await axios.post(`${API}/admin/change-password`, { current_password: passCurrent, new_password: passNew }, { headers: authH() });
+      setPassMsg("Şifreniz güncellendi. Bir dahaki girişte yeni şifrenizi kullanın.");
+      setPassCurrent(""); setPassNew(""); setPassNew2("");
+    } catch (error) { setPassMsg(error.response?.data?.detail || "Şifre değiştirilemedi, tekrar deneyin."); }
+    finally { setPassSaving(false); }
+  };
+
   return <div className="site-shell">
     <div className="top-note"><Sparkles size={14} /> Ev yapımı günlük lezzetler <span>•</span> Özel gün siparişleri alınır</div>
     <header className="navbar"><a className="brand" href="#anasayfa" data-testid="brand-home-link"><span className="brand-mark">KG</span><span>Kocaeli <em>Gaziantep Mutfağı</em></span></a><button className="mobile-menu" onClick={() => setMobileOpen(!mobileOpen)} data-testid="mobile-menu-button">{mobileOpen ? <X /> : <Menu />}</button><nav className={mobileOpen ? "nav-links open" : "nav-links"}><a href="#menu" data-testid="nav-menu-link">Fiyat Listesi</a><a href="#hakkimda" data-testid="nav-about-link">Hakkımızda</a><a href="#teslimat" data-testid="nav-delivery-link">Sipariş</a><a href={`tel:${phone}`} className="nav-phone" data-testid="nav-phone-link"><Phone size={16} /> {phoneLabel}</a><a href={whatsappLink(orderText)} target="_blank" rel="noreferrer" className="whatsapp-btn" data-testid="nav-whatsapp-link">WhatsApp'tan Yaz</a></nav></header>
@@ -206,6 +224,7 @@ function Home() {
           <button className={ownerTab === "photo" ? "active" : ""} onClick={() => setOwnerTab("photo")} data-testid="owner-tab-photo">Fotoğraf</button>
           <button className={ownerTab === "zones" ? "active" : ""} onClick={() => setOwnerTab("zones")} data-testid="owner-tab-zones">Teslimat Bölgeleri</button>
           <button className={ownerTab === "announce" ? "active" : ""} onClick={() => setOwnerTab("announce")} data-testid="owner-tab-announce">Günlük Duyuru</button>
+          <button className={ownerTab === "password" ? "active" : ""} onClick={() => setOwnerTab("password")} data-testid="owner-tab-password">Şifre</button>
         </div>
         {ownerTab === "photo" && <form onSubmit={uploadPhoto}>
           <select value={photoItem} onChange={(event) => setPhotoItem(event.target.value)} data-testid="owner-product-select"><option value="">Ürün seçin</option>{menu.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</select>
@@ -223,6 +242,13 @@ function Home() {
           <textarea readOnly value={announceText} placeholder="Duyuru metni burada belirecek" data-testid="announce-text" />
           <button className="copy-btn" onClick={() => navigator.clipboard.writeText(announceText)} disabled={!announceText} data-testid="announce-copy-button"><Copy size={14} /> Metni kopyala</button>
         </div>}
+        {ownerTab === "password" && <form onSubmit={changePassword}>
+          <input type="password" value={passCurrent} onChange={(event) => setPassCurrent(event.target.value)} placeholder="Mevcut şifre" data-testid="password-current-input" />
+          <input type="password" value={passNew} onChange={(event) => setPassNew(event.target.value)} placeholder="Yeni şifre (en az 8 karakter)" data-testid="password-new-input" />
+          <input type="password" value={passNew2} onChange={(event) => setPassNew2(event.target.value)} placeholder="Yeni şifre (tekrar)" data-testid="password-new-repeat-input" />
+          <button className="primary-btn" type="submit" disabled={passSaving || !passCurrent || !passNew || !passNew2} data-testid="password-change-submit">{passSaving ? "Kaydediliyor..." : "Şifreyi değiştir"}</button>
+          {passMsg && <p className="owner-note" data-testid="password-change-status">{passMsg}</p>}
+        </form>}
       </>}
     </div></div>}
 
