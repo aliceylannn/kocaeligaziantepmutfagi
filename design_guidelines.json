@@ -1,0 +1,85 @@
+{
+  "project_name": "Ev Lezzetleri - Günlük Ev Yemeği ve Meze Sipariş Sistemi",
+  "archetype": "ORGANIC & EARTHY",
+  "theme": "light",
+  "typography": {
+    "heading_font": "Playfair Display",
+    "body_font": "Plus Jakarta Sans",
+    "weights": {
+      "light": 300,
+      "regular": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    },
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tight font-serif",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight font-serif",
+      "h3": "text-xl sm:text-2xl font-serif",
+      "h4": "text-lg sm:text-xl font-semibold",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm text-muted-foreground"
+    }
+  },
+  "colors": {
+    "primary": "#C85A32",
+    "primary_hover": "#B04B26",
+    "secondary": "#2D5A27",
+    "accent": "#E9C46A",
+    "background": "#FDFBF7",
+    "card_background": "#FFFFFF",
+    "text": "#2C221E",
+    "muted_text": "#786862",
+    "border": "#EBE4D8",
+    "success": "#38A169"
+  },
+  "visual_enhancers": {
+    "border_radius": "rounded-2xl",
+    "shadow": "shadow-[0_10px_30px_rgba(200,90,50,0.06)]",
+    "glassmorphism": "backdrop-blur-xl bg-[#FDFBF7]/80 border border-[#EBE4D8]",
+    "texture": "Warm organic tones with subtle terracotta and olive accents, evoking homemade warmth."
+  },
+  "components": {
+    "navigation": "Sticky glassmorphism header with logo, nav links (Günlük Menü, Mezeler, Hamur İşleri, Tatlılar, Teslimat Bölgeleri, Hakkımda), phone quick-call, and WhatsApp order CTA button.",
+    "hero_section": "Emotional warm intro featuring authentic homemade food imagery, daily menu highlight, and instant WhatsApp order trigger.",
+    "daily_menu_grid": "Categorized interactive menu cards (Meze, Hamur İşi, Tatlı) with quantity selector, ingredients list, price, and 'WhatsApp ile Sipariş Ver' instant checkout button.",
+    "neighborhood_delivery_checker": "Interactive postal code / neighborhood checker for delivery zones (Kadıköy, Moda, Fenerbahçe, Göztepe, Suadiye, etc.) and pickup option.",
+    "about_chef_section": "Personal story of the home cook, cleanliness guarantee, daily fresh preparation notes with high quality cozy kitchen imagery.",
+    "reviews_section": "Customer testimonials with ratings praising the authentic taste like mom's cooking.",
+    "footer": "Rich footer with working hours, contact info, Instagram link, quick links, and WhatsApp direct link."
+  },
+  "image_urls": [
+    {
+      "category": "Hero Background / Featured Food",
+      "url": "https://images.pexels.com/photos/37444219/pexels-photo-37444219.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Traditional Turkish dining spread with tea and savory pastries."
+    },
+    {
+      "category": "Meze Category",
+      "url": "https://images.pexels.com/photos/36425899/pexels-photo-36425899.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Turkish meze dishes including börek and potato salad."
+    },
+    {
+      "category": "Pastry / Börek Category",
+      "url": "https://images.pexels.com/photos/38356208/pexels-photo-38356208.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Golden brown spiral-shaped Turkish borek."
+    },
+    {
+      "category": "Dessert Category",
+      "url": "https://images.unsplash.com/photo-1749549028894-fb0adae64a67?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwyfHx0dXJraXNoJTIwaG9tZW1hZGUlMjBmb29kJTIwZGVzc2VydCUyMGJvcmVrJTIwZG9sbWF8ZW58MHx8fHwxNzkwMzI4NjI2fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Baklava and treats"
+    },
+    {
+      "category": "Chef / Kitchen Story",
+      "url": "https://images.pexels.com/photos/8902024/pexels-photo-8902024.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Woman in an apron stands in a rustic kitchen."
+    }
+  ],
+  "universal_guidelines": [
+    "Ensure all interactive buttons have data-testid attributes.",
+    "WhatsApp buttons must pre-fill the cart items and total sum.",
+    "Never use pure black or pure white; use warm off-white #FDFBF7 and rich charcoal #2C221E.",
+    "All cards must have clear hover states and smooth transition effects.",
+    "Responsive mobile-first layout with clean padding and generous spacing."
+  ]
+}
