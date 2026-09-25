@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Header, Response, Depends
 from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -10,7 +10,10 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Literal
 import uuid
 import json
-from datetime import datetime, timezone
+import hmac
+import requests
+import jwt
+from datetime import datetime, timezone, timedelta
 from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
 
 
@@ -32,7 +35,7 @@ api_router = APIRouter(prefix="/api")
 # Define Models
 class StatusCheck(BaseModel):
     model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     client_name: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -63,12 +66,11 @@ class AIChatRequest(BaseModel):
     mode: Literal["customer", "owner"] = "customer"
     session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
-class AIChatMessage(BaseModel):
-    session_id: str
-    role: Literal["user", "assistant"]
-    content: str
-    mode: Literal["customer", "owner"]
-    created_at: str
+class AdminLogin(BaseModel):
+    password: str
+
+class ZoneInput(BaseModel):
+    name: str
 
 FOOD_IMAGES = {
     "borek": "https://images.pexels.com/photos/38356208/pexels-photo-38356208.jpeg?auto=compress&cs=tinysrgb&w=940",
@@ -124,7 +126,56 @@ MENU_ITEMS = [
     item("sutlu-kurabiye", "Sütlü Kurabiye", "Kurabiyeler & Tatlılar", 600, "kg", "Ağızda dağılan yumuşaklık.", "kurabiye"),
 ]
 
-DELIVERY_ZONES = {"Kadıköy", "Moda", "Fenerbahçe", "Göztepe", "Suadiye", "Koşuyolu"}
+# Kocaeli/İzmit varsayılan teslimat bölgeleri — işletme panelinden düzenlenebilir
+DEFAULT_ZONES = ["Yahya Kaptan", "Alikahya", "Yenişehir", "Bekirpaşa", "Kuruçeşme", "Kozluk", "Karabaş", "Ömerağa", "Kemalpaşa", "Tepeköy"]
+
+# Object storage (Emergent playbook)
+STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+APP_NAME = "kg-mutfagi"
+storage_key = None
+
+def init_storage(force: bool = False):
+    global storage_key
+    if storage_key and not force:
+        return storage_key
+    resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": os.environ.get("EMERGENT_LLM_KEY")}, timeout=30)
+    resp.raise_for_status()
+    storage_key = resp.json()["storage_key"]
+    return storage_key
+
+def put_object(path: str, data: bytes, content_type: str) -> dict:
+    key = init_storage()
+    resp = requests.put(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key, "Content-Type": content_type}, data=data, timeout=120)
+    resp.raise_for_status()
+    return resp.json()
+
+def get_object(path: str):
+    key = init_storage()
+    resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+
+# Basit yönetici kimlik doğrulaması (tek işletme sahibi)
+JWT_ALGORITHM = "HS256"
+
+def create_admin_token() -> str:
+    payload = {"role": "admin", "exp": datetime.now(timezone.utc) + timedelta(hours=12)}
+    return jwt.encode(payload, os.environ["JWT_SECRET"], algorithm=JWT_ALGORITHM)
+
+def require_admin(authorization: str | None = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Giriş gerekli")
+    try:
+        payload = jwt.decode(authorization[7:], os.environ["JWT_SECRET"], algorithms=[JWT_ALGORITHM])
+        if payload.get("role") != "admin":
+            raise HTTPException(status_code=401, detail="Yetkisiz")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Oturum geçersiz, tekrar giriş yapın")
+
+async def get_zones() -> List[str]:
+    docs = await db.delivery_zones.find({}, {"_id": 0, "name": 1}).to_list(500)
+    return [d["name"] for d in docs] or list(DEFAULT_ZONES)
 
 # Add your routes to the router instead of directly to app
 @api_router.get("/")
@@ -133,16 +184,75 @@ async def root():
 
 @api_router.get("/menu", response_model=List[MenuItem])
 async def get_menu():
-    return MENU_ITEMS
+    overrides = await db.menu_overrides.find({}, {"_id": 0}).to_list(500)
+    override_map = {entry["item_id"]: entry["image"] for entry in overrides}
+    return [{**entry, "image": override_map.get(entry["id"], entry["image"])} for entry in MENU_ITEMS]
 
 @api_router.post("/delivery-check", response_model=DeliveryResult)
 async def check_delivery(input: DeliveryCheck):
     neighborhood = input.neighborhood.strip()
     if not neighborhood:
         raise HTTPException(status_code=400, detail="Mahalle adı gerekli")
-    available = any(zone.casefold() == neighborhood.casefold() for zone in DELIVERY_ZONES)
+    zones = await get_zones()
+    available = any(zone.casefold() == neighborhood.casefold() for zone in zones)
     message = "Bu bölgeye teslimat yapıyoruz. Siparişinizi WhatsApp'tan bekliyoruz." if available else "Bu bölge henüz teslimat rotamızda değil; gelip alma seçeneğimiz her gün açık."
     return {"neighborhood": neighborhood, "available": available, "message": message}
+
+@api_router.get("/delivery/zones")
+async def list_zones():
+    return {"zones": await get_zones()}
+
+@api_router.post("/admin/login")
+async def admin_login(input: AdminLogin):
+    expected = os.environ.get("ADMIN_PASSWORD", "")
+    if not expected or not hmac.compare_digest(input.password, expected):
+        raise HTTPException(status_code=401, detail="Şifre hatalı")
+    return {"token": create_admin_token()}
+
+@api_router.post("/admin/delivery/zones")
+async def add_zone(input: ZoneInput, _admin=Depends(require_admin)):
+    name = input.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Mahalle adı gerekli")
+    await db.delivery_zones.update_one({"name_lower": name.casefold()}, {"$set": {"name": name, "name_lower": name.casefold()}}, upsert=True)
+    return {"zones": await get_zones()}
+
+@api_router.delete("/admin/delivery/zones/{name}")
+async def remove_zone(name: str, _admin=Depends(require_admin)):
+    await db.delivery_zones.delete_one({"name_lower": name.casefold()})
+    return {"zones": await get_zones()}
+
+@api_router.post("/admin/menu/{item_id}/image")
+async def upload_menu_image(item_id: str, _admin=Depends(require_admin), file: UploadFile = File(...)):
+    if not any(entry["id"] == item_id for entry in MENU_ITEMS):
+        raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=400, detail="Yalnızca görsel dosyası yükleyin")
+    data = await file.read()
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Dosya 10 MB'dan küçük olmalı")
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "jpg"
+    path = f"{APP_NAME}/menu/{item_id}-{uuid.uuid4().hex[:8]}.{ext}"
+    try:
+        result = put_object(path, data, file.content_type)
+    except Exception as exc:
+        logger.exception("Storage upload failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Fotoğraf yüklenemedi, lütfen tekrar deneyin")
+    await db.files.insert_one({"id": str(uuid.uuid4()), "storage_path": result["path"], "original_filename": file.filename, "content_type": file.content_type, "size": result["size"], "is_deleted": False, "created_at": datetime.now(timezone.utc).isoformat()})
+    image = f"/api/files/{result['path']}"
+    await db.menu_overrides.update_one({"item_id": item_id}, {"$set": {"item_id": item_id, "image": image}}, upsert=True)
+    return {"image": image}
+
+@api_router.get("/files/{path:path}")
+async def serve_file(path: str):
+    record = await db.files.find_one({"storage_path": path, "is_deleted": False})
+    if not record:
+        raise HTTPException(status_code=404, detail="Dosya bulunamadı")
+    try:
+        data, content_type = get_object(path)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Dosya bulunamadı")
+    return Response(content=data, media_type=record.get("content_type", content_type))
 
 def menu_context():
     return "\n".join(f"- {entry['name']}: {entry['price']} TL / {entry['unit']} ({entry['category']})" for entry in MENU_ITEMS)
@@ -192,24 +302,19 @@ async def ai_chat(input: AIChatRequest):
 async def create_status_check(input: StatusCheckCreate):
     status_dict = input.model_dump()
     status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
+
     doc = status_obj.model_dump()
     doc['timestamp'] = doc['timestamp'].isoformat()
-    
+
     _ = await db.status_checks.insert_one(doc)
     return status_obj
 
 @api_router.get("/status", response_model=List[StatusCheck])
 async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
     status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
     for check in status_checks:
         if isinstance(check['timestamp'], str):
             check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
     return status_checks
 
 # Include the router in the main app
@@ -229,6 +334,16 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+@app.on_event("startup")
+async def startup():
+    try:
+        init_storage()
+        logger.info("Object storage hazır")
+    except Exception as exc:
+        logger.error("Storage init başarısız: %s", exc)
+    if await db.delivery_zones.count_documents({}) == 0:
+        await db.delivery_zones.insert_many([{"name": name, "name_lower": name.casefold()} for name in DEFAULT_ZONES])
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
