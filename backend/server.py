@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import re
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
@@ -35,7 +36,7 @@ api_router = APIRouter(prefix="/api")
 
 # Define Models
 class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
+    model_config = ConfigDict(extra="ignore")
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     client_name: str
@@ -53,6 +54,20 @@ class MenuItem(BaseModel):
     unit: str
     image: str
     badge: str | None = None
+
+class MenuItemInput(BaseModel):
+    name: str
+    category: str
+    price: int
+    unit: str
+    description: str = ""
+
+class MenuItemUpdate(BaseModel):
+    name: str | None = None
+    category: str | None = None
+    price: int | None = None
+    unit: str | None = None
+    description: str | None = None
 
 class DeliveryCheck(BaseModel):
     neighborhood: str
@@ -77,6 +92,15 @@ class PasswordChange(BaseModel):
 class ZoneInput(BaseModel):
     name: str
 
+CATEGORIES = ["Hamur İşi", "Zeytinyağlılar", "Köfteler & Salatalar", "Kurabiyeler & Tatlılar"]
+
+CATEGORY_IMAGES = {
+    "Hamur İşi": "https://images.pexels.com/photos/38356208/pexels-photo-38356208.jpeg?auto=compress&cs=tinysrgb&w=940",
+    "Zeytinyağlılar": "https://images.pexels.com/photos/31928139/pexels-photo-31928139.jpeg?auto=compress&cs=tinysrgb&w=940",
+    "Köfteler & Salatalar": "https://images.pexels.com/photos/9399948/pexels-photo-9399948.jpeg?auto=compress&cs=tinysrgb&w=940",
+    "Kurabiyeler & Tatlılar": "https://images.pexels.com/photos/8681910/pexels-photo-8681910.jpeg?auto=compress&cs=tinysrgb&w=940",
+}
+
 FOOD_IMAGES = {
     "borek": "https://images.pexels.com/photos/38356208/pexels-photo-38356208.jpeg?auto=compress&cs=tinysrgb&w=940",
     "pogaca": "https://images.pexels.com/photos/17101845/pexels-photo-17101845.jpeg?auto=compress&cs=tinysrgb&w=940",
@@ -92,7 +116,7 @@ FOOD_IMAGES = {
 def item(id, name, category, price, unit, description, image):
     return {"id": id, "name": name, "category": category, "price": price, "unit": unit, "description": description, "image": FOOD_IMAGES[image]}
 
-MENU_ITEMS = [
+MENU_SEED = [
     item("milfoy-tepsi", "Milföylü Tepsi Böreği", "Hamur İşi", 800, "tepsi", "Kat kat, çıtır ve fırından taze.", "borek"),
     item("katmer-pogaca", "Katmer Poğaça", "Hamur İşi", 600, "kg", "Tel tel açılan yumuşacık poğaça.", "pogaca"),
     item("peynirli-pogaca", "1 Tepsi Peynirli Poğaça", "Hamur İşi", 500, "tepsi", "Ev yapımı peynirli poğaça.", "pogaca"),
@@ -178,6 +202,10 @@ def require_admin(authorization: str | None = Header(None)):
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Oturum geçersiz, tekrar giriş yapın")
 
+def slugify(text: str) -> str:
+    text = text.translate(str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosuCGIOSU")).lower()
+    return re.sub(r"[^a-z0-9]+", "-", text).strip("-") or "urun"
+
 async def get_zones() -> List[str]:
     docs = await db.delivery_zones.find({}, {"_id": 0, "name": 1}).to_list(500)
     return [d["name"] for d in docs] or list(DEFAULT_ZONES)
@@ -189,9 +217,7 @@ async def root():
 
 @api_router.get("/menu", response_model=List[MenuItem])
 async def get_menu():
-    overrides = await db.menu_overrides.find({}, {"_id": 0}).to_list(500)
-    override_map = {entry["item_id"]: entry["image"] for entry in overrides}
-    return [{**entry, "image": override_map.get(entry["id"], entry["image"])} for entry in MENU_ITEMS]
+    return await db.menu_items.find({}, {"_id": 0}).to_list(500)
 
 @api_router.post("/delivery-check", response_model=DeliveryResult)
 async def check_delivery(input: DeliveryCheck):
@@ -230,6 +256,39 @@ async def change_password(input: PasswordChange, _admin=Depends(require_admin)):
     await db.settings.update_one({"key": "admin_password"}, {"$set": {"key": "admin_password", "hash": hashed}}, upsert=True)
     return {"message": "Şifre güncellendi"}
 
+@api_router.post("/admin/menu", response_model=MenuItem)
+async def create_menu_item(input: MenuItemInput, _admin=Depends(require_admin)):
+    if input.category not in CATEGORIES:
+        raise HTTPException(status_code=400, detail="Geçersiz kategori")
+    if not input.name.strip() or input.price < 0:
+        raise HTTPException(status_code=400, detail="Ürün adı ve fiyatı gerekli")
+    doc = {"id": f"{slugify(input.name)}-{uuid.uuid4().hex[:6]}", "name": input.name.strip(), "category": input.category,
+           "price": input.price, "unit": input.unit.strip() or "adet", "description": input.description.strip(),
+           "image": CATEGORY_IMAGES[input.category]}
+    await db.menu_items.insert_one(doc)
+    return doc
+
+@api_router.put("/admin/menu/{item_id}", response_model=MenuItem)
+async def update_menu_item(item_id: str, input: MenuItemUpdate, _admin=Depends(require_admin)):
+    updates = {k: v for k, v in input.model_dump().items() if v is not None}
+    if "category" in updates and updates["category"] not in CATEGORIES:
+        raise HTTPException(status_code=400, detail="Geçersiz kategori")
+    if "price" in updates and updates["price"] < 0:
+        raise HTTPException(status_code=400, detail="Fiyat sıfırdan küçük olamaz")
+    if not updates:
+        raise HTTPException(status_code=400, detail="Güncellenecek alan yok")
+    result = await db.menu_items.find_one_and_update({"id": item_id}, {"$set": updates}, return_document=True, projection={"_id": 0})
+    if not result:
+        raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+    return result
+
+@api_router.delete("/admin/menu/{item_id}")
+async def delete_menu_item(item_id: str, _admin=Depends(require_admin)):
+    result = await db.menu_items.delete_one({"id": item_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+    return {"message": "Ürün silindi"}
+
 @api_router.post("/admin/delivery/zones")
 async def add_zone(input: ZoneInput, _admin=Depends(require_admin)):
     name = input.name.strip()
@@ -245,7 +304,7 @@ async def remove_zone(name: str, _admin=Depends(require_admin)):
 
 @api_router.post("/admin/menu/{item_id}/image")
 async def upload_menu_image(item_id: str, _admin=Depends(require_admin), file: UploadFile = File(...)):
-    if not any(entry["id"] == item_id for entry in MENU_ITEMS):
+    if not await db.menu_items.find_one({"id": item_id}):
         raise HTTPException(status_code=404, detail="Ürün bulunamadı")
     if not (file.content_type or "").startswith("image/"):
         raise HTTPException(status_code=400, detail="Yalnızca görsel dosyası yükleyin")
@@ -261,7 +320,7 @@ async def upload_menu_image(item_id: str, _admin=Depends(require_admin), file: U
         raise HTTPException(status_code=502, detail="Fotoğraf yüklenemedi, lütfen tekrar deneyin")
     await db.files.insert_one({"id": str(uuid.uuid4()), "storage_path": result["path"], "original_filename": file.filename, "content_type": file.content_type, "size": result["size"], "is_deleted": False, "created_at": datetime.now(timezone.utc).isoformat()})
     image = f"/api/files/{result['path']}"
-    await db.menu_overrides.update_one({"item_id": item_id}, {"$set": {"item_id": item_id, "image": image}}, upsert=True)
+    await db.menu_items.update_one({"id": item_id}, {"$set": {"image": image}})
     return {"image": image}
 
 @api_router.get("/files/{path:path}")
@@ -275,11 +334,12 @@ async def serve_file(path: str):
         raise HTTPException(status_code=404, detail="Dosya bulunamadı")
     return Response(content=data, media_type=record.get("content_type", content_type))
 
-def menu_context():
-    return "\n".join(f"- {entry['name']}: {entry['price']} TL / {entry['unit']} ({entry['category']})" for entry in MENU_ITEMS)
+async def menu_context():
+    docs = await db.menu_items.find({}, {"_id": 0, "name": 1, "price": 1, "unit": 1, "category": 1}).to_list(500)
+    return "\n".join(f"- {entry['name']}: {entry['price']} TL / {entry['unit']} ({entry['category']})" for entry in docs)
 
-def system_prompt(mode: str):
-    shared = f"""Sen Kocaeli Gaziantep Mutfağı'nın Türkçe dijital asistanısın. Sıcak, kısa ve güvenilir cevaplar ver. İşletme telefonu 0541 440 80 94. Güncel fiyat ve ürün bilgileri yalnızca aşağıdaki listedir; listede olmayan bir ürün veya fiyat uydurma. Sipariş için müşteriyi WhatsApp'a yönlendir.\n\nGÜNCEL MENÜ:\n{menu_context()}"""
+async def system_prompt(mode: str):
+    shared = f"""Sen Kocaeli Gaziantep Mutfağı'nın Türkçe dijital asistanısın. Sıcak, kısa ve güvenilir cevaplar ver. İşletme telefonu 0541 440 80 94. Güncel fiyat ve ürün bilgileri yalnızca aşağıdaki listedir; listede olmayan bir ürün veya fiyat uydurma. Sipariş için müşteriyi WhatsApp'a yönlendir.\n\nGÜNCEL MENÜ:\n{await menu_context()}"""
     if mode == "owner":
         return shared + "\n\nBu oturum işletme sahibine yardım eder. Menü açıklaması, kampanya fikri, Instagram metni ve müşteri duyurusu hazırlayabilirsin. Metinleri Türkçe, pratik ve markanın ev yapımı tonunda üret."
     return shared + "\n\nBu oturum müşterilere yardımcı olur. Ürün öner, fiyat ve porsiyon bilgisi ver, teslimat/sipariş sorularını yanıtla. İşletme içi veya gizli bilgi paylaşma."
@@ -303,7 +363,7 @@ async def ai_chat(input: AIChatRequest):
     async def event_generator():
         answer_parts = []
         try:
-            chat = LlmChat(api_key=key, session_id=input.session_id, system_message=system_prompt(input.mode)).with_model("openai", "gpt-5.4")
+            chat = LlmChat(api_key=key, session_id=input.session_id, system_message=await system_prompt(input.mode)).with_model("openai", "gpt-5.4")
             async for event in chat.stream_message(UserMessage(text=prompt)):
                 if isinstance(event, TextDelta):
                     answer_parts.append(event.content)
@@ -365,6 +425,9 @@ async def startup():
         logger.error("Storage init başarısız: %s", exc)
     if await db.delivery_zones.count_documents({}) == 0:
         await db.delivery_zones.insert_many([{"name": name, "name_lower": name.casefold()} for name in DEFAULT_ZONES])
+    if await db.menu_items.count_documents({}) == 0:
+        await db.menu_items.insert_many([dict(entry) for entry in MENU_SEED])
+        logger.info("Menü veritabanına yüklendi (%d ürün)", len(MENU_SEED))
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

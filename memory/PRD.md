@@ -25,6 +25,7 @@
 - 2026-09-25: Sipariş sepeti (adet, toplam, WhatsApp'a özetli gönderim)
 - 2026-09-25: İşletme Paneli — şifreli giriş, ürün fotoğrafı yükleme (object storage), teslimat bölgesi ekle/sil, AI günlük duyuru oluşturucu
 - 2026-09-25: İşletme Paneli'ne "Şifre" sekmesi — sahibi panelden kendi şifresini değiştirebiliyor (bcrypt ile Mongo'da saklanıyor)
+- 2026-09-25: Menü veritabanına taşındı (menu_items koleksiyonu) — paneldeki "Menü & Fiyat" sekmesinden ürün ekleme, fiyat/ad/birim/açıklama/kategori düzenleme, fotoğraf değiştirme ve silme; AI asistan menüyü artık canlı veritabanından okuyor
 - 2026-09-25: Teslimat bölgeleri Kocaeli/İzmit varsayılanlarına taşındı ve veritabanından yönetilir hale geldi
 
 ## Kalan / Backlog

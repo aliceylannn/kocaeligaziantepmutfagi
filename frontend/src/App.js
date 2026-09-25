@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import "@/App.css";
 import axios from "axios";
-import { ArrowRight, Bot, Check, ChevronDown, Clock3, Copy, Heart, ImagePlus, Instagram, MapPin, Menu, Minus, Phone, Plus, Send, ShoppingBag, Sparkles, Star, X } from "lucide-react";
+import { ArrowRight, Bot, Check, ChevronDown, Clock3, Copy, Heart, ImagePlus, Instagram, MapPin, Menu, Minus, Pencil, Phone, Plus, Send, ShoppingBag, Sparkles, Star, Trash2, X } from "lucide-react";
 
 const BACKEND = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND}/api`;
@@ -71,11 +71,15 @@ function Home() {
   const [ownerToken, setOwnerToken] = useState(() => window.sessionStorage.getItem("owner-token") || "");
   const [ownerPass, setOwnerPass] = useState("");
   const [ownerError, setOwnerError] = useState("");
-  const [ownerTab, setOwnerTab] = useState("photo");
-  const [photoItem, setPhotoItem] = useState("");
-  const [photoFile, setPhotoFile] = useState(null);
-  const [photoMsg, setPhotoMsg] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const [ownerTab, setOwnerTab] = useState("menu");
+  const [menuMsg, setMenuMsg] = useState("");
+  const [menuBusy, setMenuBusy] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
+  const [newForm, setNewForm] = useState({ name: "", category: "Hamur İşi", price: "", unit: "", description: "" });
+  const [newFile, setNewFile] = useState(null);
+  const [editId, setEditId] = useState("");
+  const [editForm, setEditForm] = useState({});
+  const [editFile, setEditFile] = useState(null);
   const [zones, setZones] = useState([]);
   const [zoneInput, setZoneInput] = useState("");
   const [announceText, setAnnounceText] = useState("");
@@ -133,20 +137,48 @@ function Home() {
     } catch { setOwnerError("Şifre hatalı, tekrar deneyin."); }
   };
 
-  const uploadPhoto = async (event) => {
+  const refreshMenu = async () => { const response = await axios.get(`${API}/menu`); setMenu(response.data); };
+  const uploadPhotoFor = async (id, file) => { const form = new FormData(); form.append("file", file); await axios.post(`${API}/admin/menu/${id}/image`, form, { headers: authH() }); };
+
+  const createItem = async (event) => {
     event.preventDefault();
-    if (!photoItem || !photoFile || uploading) return;
-    setUploading(true); setPhotoMsg("");
+    if (menuBusy) return;
+    setMenuBusy(true); setMenuMsg("");
     try {
-      const form = new FormData();
-      form.append("file", photoFile);
-      await axios.post(`${API}/admin/menu/${photoItem}/image`, form, { headers: authH() });
-      const refreshed = await axios.get(`${API}/menu`);
-      setMenu(refreshed.data);
-      setPhotoMsg("Fotoğraf güncellendi, sitede yayında.");
-      setPhotoFile(null);
-    } catch { setPhotoMsg("Yükleme başarısız, tekrar deneyin."); }
-    finally { setUploading(false); }
+      const response = await axios.post(`${API}/admin/menu`, { ...newForm, price: parseInt(newForm.price, 10) || 0 }, { headers: authH() });
+      if (newFile) await uploadPhotoFor(response.data.id, newFile);
+      await refreshMenu();
+      setMenuMsg("Ürün eklendi ve sitede yayında.");
+      setNewOpen(false); setNewFile(null);
+      setNewForm({ name: "", category: "Hamur İşi", price: "", unit: "", description: "" });
+    } catch (error) { setMenuMsg(error.response?.data?.detail || "Ürün eklenemedi, tekrar deneyin."); }
+    finally { setMenuBusy(false); }
+  };
+
+  const startEdit = (item) => {
+    setEditId(item.id);
+    setEditForm({ name: item.name, category: item.category, price: item.price, unit: item.unit, description: item.description });
+    setEditFile(null); setMenuMsg("");
+  };
+
+  const saveEdit = async (event) => {
+    event.preventDefault();
+    if (menuBusy) return;
+    setMenuBusy(true); setMenuMsg("");
+    try {
+      await axios.put(`${API}/admin/menu/${editId}`, { ...editForm, price: parseInt(editForm.price, 10) || 0 }, { headers: authH() });
+      if (editFile) await uploadPhotoFor(editId, editFile);
+      await refreshMenu();
+      setEditId(""); setEditFile(null);
+      setMenuMsg("Ürün güncellendi.");
+    } catch (error) { setMenuMsg(error.response?.data?.detail || "Güncelleme başarısız."); }
+    finally { setMenuBusy(false); }
+  };
+
+  const deleteItem = async (id) => {
+    if (!window.confirm("Bu ürünü silmek istiyor musunuz?")) return;
+    try { await axios.delete(`${API}/admin/menu/${id}`, { headers: authH() }); await refreshMenu(); setMenuMsg("Ürün silindi."); }
+    catch { setMenuMsg("Silme başarısız, tekrar deneyin."); }
   };
 
   const addZone = async (event) => {
@@ -214,24 +246,56 @@ function Home() {
     {ownerOpen && <div className="drawer-overlay" onClick={() => setOwnerOpen(false)}><div className="owner-modal" data-testid="owner-panel" onClick={(event) => event.stopPropagation()}>
       <button className="owner-close" onClick={() => setOwnerOpen(false)} data-testid="owner-close-button"><X size={18} /></button>
       <h3>İşletme Paneli</h3>
-      <p className="sub">Fotoğraf, teslimat bölgesi ve duyuru yönetimi</p>
+      <p className="sub">Menü, teslimat bölgesi ve duyuru yönetimi</p>
       {!ownerToken ? <form onSubmit={ownerLogin}>
         <input type="password" value={ownerPass} onChange={(event) => setOwnerPass(event.target.value)} placeholder="İşletme şifresi" data-testid="owner-password-input" />
         <button className="primary-btn" type="submit" data-testid="owner-login-submit">Giriş yap</button>
         {ownerError && <p className="owner-error" data-testid="owner-login-error">{ownerError}</p>}
       </form> : <>
         <div className="owner-tabs">
-          <button className={ownerTab === "photo" ? "active" : ""} onClick={() => setOwnerTab("photo")} data-testid="owner-tab-photo">Fotoğraf</button>
+          <button className={ownerTab === "menu" ? "active" : ""} onClick={() => setOwnerTab("menu")} data-testid="owner-tab-menu">Menü & Fiyat</button>
           <button className={ownerTab === "zones" ? "active" : ""} onClick={() => setOwnerTab("zones")} data-testid="owner-tab-zones">Teslimat Bölgeleri</button>
           <button className={ownerTab === "announce" ? "active" : ""} onClick={() => setOwnerTab("announce")} data-testid="owner-tab-announce">Günlük Duyuru</button>
           <button className={ownerTab === "password" ? "active" : ""} onClick={() => setOwnerTab("password")} data-testid="owner-tab-password">Şifre</button>
         </div>
-        {ownerTab === "photo" && <form onSubmit={uploadPhoto}>
-          <select value={photoItem} onChange={(event) => setPhotoItem(event.target.value)} data-testid="owner-product-select"><option value="">Ürün seçin</option>{menu.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</select>
-          <label className="file-drop" data-testid="owner-file-drop"><ImagePlus size={17} /> {photoFile ? photoFile.name : "Fotoğraf seç"}<input type="file" accept="image/*" hidden data-testid="owner-file-input" onChange={(event) => setPhotoFile(event.target.files[0] || null)} /></label>
-          <button className="primary-btn" type="submit" disabled={uploading || !photoItem || !photoFile} data-testid="owner-upload-button">{uploading ? "Yükleniyor..." : "Fotoğrafı güncelle"}</button>
-          {photoMsg && <p className="owner-note" data-testid="owner-upload-status">{photoMsg}</p>}
-        </form>}
+        {ownerTab === "menu" && <div className="owner-body">
+          <button className="copy-btn" onClick={() => setNewOpen(!newOpen)} data-testid="menu-new-toggle"><Plus size={14} /> Yeni ürün ekle</button>
+          {newOpen && <form onSubmit={createItem} className="menu-edit-form" data-testid="menu-new-form">
+            <input type="text" value={newForm.name} onChange={(event) => setNewForm({ ...newForm, name: event.target.value })} placeholder="Ürün adı (örn. Su Böreği)" data-testid="menu-new-name" />
+            <select value={newForm.category} onChange={(event) => setNewForm({ ...newForm, category: event.target.value })} data-testid="menu-new-category">{categories.slice(1).map((c) => <option key={c} value={c}>{c}</option>)}</select>
+            <div className="field-row">
+              <input type="number" min="0" value={newForm.price} onChange={(event) => setNewForm({ ...newForm, price: event.target.value })} placeholder="Fiyat (TL)" data-testid="menu-new-price" />
+              <input type="text" value={newForm.unit} onChange={(event) => setNewForm({ ...newForm, unit: event.target.value })} placeholder="Birim (kg, tepsi...)" data-testid="menu-new-unit" />
+            </div>
+            <input type="text" value={newForm.description} onChange={(event) => setNewForm({ ...newForm, description: event.target.value })} placeholder="Kısa açıklama" data-testid="menu-new-description" />
+            <label className="file-drop" data-testid="menu-new-file-drop"><ImagePlus size={17} /> {newFile ? newFile.name : "Fotoğraf ekle (isteğe bağlı)"}<input type="file" accept="image/*" hidden data-testid="menu-new-file" onChange={(event) => setNewFile(event.target.files[0] || null)} /></label>
+            <button className="primary-btn" type="submit" disabled={menuBusy || !newForm.name.trim() || !newForm.price} data-testid="menu-new-submit">{menuBusy ? "Kaydediliyor..." : "Ürünü yayınla"}</button>
+          </form>}
+          {menuMsg && <p className="owner-note" data-testid="menu-action-status">{menuMsg}</p>}
+          <div className="menu-admin-list" data-testid="menu-admin-list">
+            {menu.map((item) => <div className="menu-admin-row" key={item.id} data-testid={`menu-row-${item.id}`}>
+              {editId === item.id ? <form onSubmit={saveEdit} className="menu-edit-form">
+                <input type="text" value={editForm.name} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} placeholder="Ürün adı" data-testid="menu-edit-name" />
+                <select value={editForm.category} onChange={(event) => setEditForm({ ...editForm, category: event.target.value })} data-testid="menu-edit-category">{categories.slice(1).map((c) => <option key={c} value={c}>{c}</option>)}</select>
+                <div className="field-row">
+                  <input type="number" min="0" value={editForm.price} onChange={(event) => setEditForm({ ...editForm, price: event.target.value })} placeholder="Fiyat (TL)" data-testid="menu-edit-price" />
+                  <input type="text" value={editForm.unit} onChange={(event) => setEditForm({ ...editForm, unit: event.target.value })} placeholder="Birim" data-testid="menu-edit-unit" />
+                </div>
+                <input type="text" value={editForm.description} onChange={(event) => setEditForm({ ...editForm, description: event.target.value })} placeholder="Kısa açıklama" data-testid="menu-edit-description" />
+                <label className="file-drop" data-testid="menu-edit-file-drop"><ImagePlus size={15} /> {editFile ? editFile.name : "Fotoğrafı değiştir (isteğe bağlı)"}<input type="file" accept="image/*" hidden data-testid="menu-edit-file" onChange={(event) => setEditFile(event.target.files[0] || null)} /></label>
+                <div className="field-row">
+                  <button className="primary-btn" type="submit" disabled={menuBusy} data-testid="menu-edit-save">{menuBusy ? "Kaydediliyor..." : "Kaydet"}</button>
+                  <button className="copy-btn" type="button" onClick={() => setEditId("")} data-testid="menu-edit-cancel">Vazgeç</button>
+                </div>
+              </form> : <>
+                <img src={resolveImg(item.image)} alt={item.name} />
+                <div className="menu-admin-info"><b>{item.name}</b><small>{item.price.toLocaleString("tr-TR")} TL / {item.unit} — {item.category}</small></div>
+                <button className="icon-btn" onClick={() => startEdit(item)} data-testid={`menu-edit-${item.id}`} aria-label={`${item.name} düzenle`}><Pencil size={13} /></button>
+                <button className="icon-btn danger" onClick={() => deleteItem(item.id)} data-testid={`menu-delete-${item.id}`} aria-label={`${item.name} sil`}><Trash2 size={13} /></button>
+              </>}
+            </div>)}
+          </div>
+        </div>}
         {ownerTab === "zones" && <div className="owner-body">
           <div className="zone-list" data-testid="zone-list">{zones.map((zone, index) => <span className="zone-chip" key={zone} data-testid={`zone-chip-${index}`}>{zone}<button onClick={() => removeZone(zone)} data-testid={`zone-remove-${index}`} aria-label={`${zone} sil`}><X size={12} /></button></span>)}</div>
           <form onSubmit={addZone} className="zone-form"><input value={zoneInput} onChange={(event) => setZoneInput(event.target.value)} placeholder="Yeni mahalle adı" data-testid="owner-zone-input" /><button type="submit" data-testid="owner-zone-add-button" aria-label="Mahalle ekle"><Plus size={15} /></button></form>
